@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html>
-
 <head>
 <meta charset="UTF-8">
 <title>Teams Escape Room Test</title>
 
 <style>
-
 body{
     background:#1d1d1d;
     color:white;
@@ -35,8 +33,11 @@ select{
     width:220px;
 }
 
+#clickButton:disabled{
+    opacity:0.4;
+    cursor:not-allowed;
+}
 </style>
-
 </head>
 
 <body>
@@ -45,13 +46,9 @@ select{
 
 <h1>Teams Escape Room Test</h1>
 
-<h2 id="counter">
-Counter: 0
-</h2>
+<h2 id="counter">Counter: 0</h2>
 
-<h2 id="activePlayer">
-Active Player: none
-</h2>
+<h2 id="activePlayer">Active Player: none</h2>
 
 <hr>
 
@@ -63,15 +60,8 @@ placeholder="Your Name"
 <br><br>
 
 <select id="roomSelect">
-
-<option value="alpha">
-Room Alpha
-</option>
-
-<option value="beta">
-Room Beta
-</option>
-
+<option value="alpha">Room Alpha</option>
+<option value="beta">Room Beta</option>
 </select>
 
 <br><br>
@@ -94,166 +84,133 @@ Become Active Player
 
 <div id="status"></div>
 
+<br>
+
+<div id="teamsStatus">
+Standalone Mode
+</div>
+
 </div>
 
 <script type="module">
 
-import { initializeApp }
-from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 
 import {
-getDatabase,
-ref,
-set,
-get,
-onValue
-}
-from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+    getDatabase,
+    ref,
+    set,
+    get,
+    onValue
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
 const firebaseConfig = {
-
-  apiKey: "AIzaSyDFBUCUy87krz4xj4GD0xRqLqfEkegiwtI",
-
-  authDomain: "teams-game-test.firebaseapp.com",
-
-  databaseURL: "https://teams-game-test-default-rtdb.europe-west1.firebasedatabase.app",
-
-  projectId: "teams-game-test",
-
-  storageBucket: "teams-game-test.firebasestorage.app",
-
-  messagingSenderId: "414740614489",
-
-  appId: "1:414740614489:web:b045f2f59f78b475705048",
-
-  measurementId: "G-C9BCL58JSV"
-
+    apiKey: "DIN_API_KEY",
+    authDomain: "teams-game-test.firebaseapp.com",
+    databaseURL: "https://teams-game-test-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "teams-game-test",
+    storageBucket: "teams-game-test.firebasestorage.app",
+    messagingSenderId: "414740614489",
+    appId: "1:414740614489:web:b045f2f59f78b475705048"
 };
 
 const app = initializeApp(firebaseConfig);
-
 const db = getDatabase(app);
 
-let myName = "";
+let currentPlayer = "";
+let currentRoom = "";
 
-let roomId = "alpha";
+function joinGame() {
 
-let unsubscribe = null;
+    currentPlayer =
+        document.getElementById("playerName").value.trim();
 
-function connectRoom() {
+    currentRoom =
+        document.getElementById("roomSelect").value;
 
-    roomId =
-        document.getElementById(
-            "roomSelect"
-        ).value;
-
-    const gameRef =
-        ref(
-            db,
-            `rooms/${roomId}`
-        );
-
-    onValue(gameRef,(snapshot)=>{
-
-        const data =
-            snapshot.val();
-
-        if(!data)
-            return;
-
-        document.getElementById("counter")
-            .innerHTML =
-            "Counter: " +
-            data.counter;
-
-        document.getElementById("activePlayer")
-            .innerHTML =
-            "Active Player: " +
-            data.activePlayer;
-
-        const allowed =
-            data.activePlayer === myName;
-
-        document.getElementById("clickButton")
-            .disabled =
-            !allowed;
-
-    });
-
-}
-
-window.joinGame = function(){
-
-    myName =
-        document.getElementById(
-            "playerName"
-        ).value;
-
-    if(!myName)
-    {
-        alert("Enter a name");
+    if (!currentPlayer) {
+        alert("Enter your name");
         return;
     }
 
-    connectRoom();
+    document.getElementById("status").innerText =
+        `Joined ${currentRoom} as ${currentPlayer}`;
 
-    document.getElementById(
-        "status"
-    ).innerHTML =
-        "Joined " +
-        roomId +
-        " as " +
-        myName;
-};
+    const roomRef = ref(db, `rooms/${currentRoom}`);
 
-window.becomeLeader = async function(){
+    onValue(roomRef, snapshot => {
 
-    if(!myName)
-    {
+        const data = snapshot.val();
+
+        if (!data) return;
+
+        document.getElementById("counter").innerText =
+            "Counter: " + (data.counter || 0);
+
+        document.getElementById("activePlayer").innerText =
+            "Active Player: " +
+            (data.activePlayer || "none");
+
+        const isLeader =
+            data.activePlayer === currentPlayer;
+
+        document.getElementById("clickButton").disabled =
+            !isLeader;
+
+    });
+}
+
+async function increaseCounter() {
+
+    if (!currentRoom) return;
+
+    const roomRef = ref(db, `rooms/${currentRoom}`);
+
+    const snapshot = await get(roomRef);
+
+    let counter = 0;
+
+    if (snapshot.exists()) {
+        counter = snapshot.val().counter || 0;
+    }
+
+    await set(roomRef, {
+        counter: counter + 1,
+        activePlayer:
+            snapshot.exists()
+                ? snapshot.val().activePlayer || ""
+                : ""
+    });
+}
+
+async function becomeLeader() {
+
+    if (!currentRoom) {
         alert("Join first");
         return;
     }
 
-    await set(
-        ref(
-            db,
-            `rooms/${roomId}/activePlayer`
-        ),
-        myName
-    );
-};
+    const roomRef = ref(db, `rooms/${currentRoom}`);
 
-window.increaseCounter = async function(){
+    const snapshot = await get(roomRef);
 
-    const roomRef =
-        ref(
-            db,
-            `rooms/${roomId}`
-        );
+    const currentCounter =
+        snapshot.exists()
+            ? snapshot.val().counter || 0
+            : 0;
 
-    const snapshot =
-        await get(roomRef);
+    await set(roomRef, {
+        counter: currentCounter,
+        activePlayer: currentPlayer
+    });
+}
 
-    const data =
-        snapshot.val();
-
-    if(data.activePlayer !== myName)
-    {
-        alert("Not your turn");
-        return;
-    }
-
-    await set(
-        ref(
-            db,
-            `rooms/${roomId}/counter`
-        ),
-        data.counter + 1
-    );
-};
+/* KRITISK FIX */
+window.joinGame = joinGame;
+window.increaseCounter = increaseCounter;
+window.becomeLeader = becomeLeader;
 
 </script>
 
 </body>
-
 </html>
